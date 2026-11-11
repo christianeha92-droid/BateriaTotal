@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Batería Total</string>
+    <string name="notification_channel_name">Monitorización de batería</string>
+    <string name="notification_channel_description">Registro continuo del estado, consumo y temperatura de la batería</string>
+</resources>

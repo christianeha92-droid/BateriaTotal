@@ -1,0 +1,21 @@
+# Android / Gradle
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Artefactos de compilación y firmas
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Sistema
+.DS_Store
+Thumbs.db
