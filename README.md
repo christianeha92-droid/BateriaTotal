@@ -292,9 +292,11 @@ Las versiones 1.1.0, 1.2.0 y 1.3.0 se instalaron y probaron en un **Xiaomi 14
 - Instalación y actualización por ADB correctas (`versionCode 4`, `versionName
   1.3.0`).
 - El servicio en primer plano arranca y mantiene su notificación de monitor.
-- **Procesos**: la pestaña mostró 38 apps sin las del sistema y 217 con ellas,
-  con filtros, estado, consumo estimado y acciones por app. Batería Total apareció
-  correctamente en primer plano mientras la pantalla estaba abierta.
+- **Procesos**: la pestaña mostró las apps con actividad real de las últimas
+  24 h (16 visibles sin las del sistema y 38 al incluirlas en la última
+  comprobación), con filtros, estado, consumo estimado y acciones por app.
+  Batería Total apareció correctamente en primer plano mientras la pantalla
+  estaba abierta.
 - **Detener Facebook** mostró el diálogo que explica la restricción de Android 14
   y «Abrir ficha» llevó a
   `com.miui.securitycenter/com.miui.appmanager.ApplicationsDetailsActivity`, con
