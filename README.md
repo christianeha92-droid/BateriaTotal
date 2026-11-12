@@ -10,7 +10,7 @@ batería, consumo y estado del hardware usando **solo APIs públicas**, sin root
 sin Shizuku y sin permisos privilegiados.
 
 - Paquete: `com.batteriatotal`
-- Versión: `1.2.0` (versionCode 3)
+- Versión: `1.3.0` (versionCode 4)
 - `minSdk 26` · `targetSdk 35` · `compileSdk 35`
 - Kotlin + Jetpack Compose (Material 3)
 - **Sin permiso de Internet**: todos los datos se quedan en el teléfono.
@@ -18,17 +18,23 @@ sin Shizuku y sin permisos privilegiados.
 
 ## APK listo para instalar
 
-[**Descargar el APK 1.2.0 desde GitHub Releases**](https://github.com/christianeha92-droid/BateriaTotal/releases/latest)
+[**Descargar el APK 1.3.0 desde GitHub Releases**](https://github.com/christianeha92-droid/BateriaTotal/releases/latest)
 
 También puedes compilarlo desde el código. El APK local se llama
-`BateriaTotal-1.2.0-debug.apk` y queda en `app/build/outputs/apk/debug/app-debug.apk`.
+`BateriaTotal-1.3.0-debug.apk` y queda en `app/build/outputs/apk/debug/app-debug.apk`.
 Está firmado con la clave de depuración de Android (APK Signature Scheme v2),
 por lo que es instalable directamente, pero no sirve para publicar en Google Play.
+
+SHA-256 del APK publicado:
+
+```
+7174345a55996bab3aa403a7269b90e35f309cace99f16d5a6344a1fb53ef5da
+```
 
 ### Instalar por ADB
 
 ```bash
-adb install -r BateriaTotal-1.2.0-debug.apk
+adb install -r BateriaTotal-1.3.0-debug.apk
 ```
 
 En HyperOS/MIUI activa antes **Ajustes → Ajustes adicionales → Opciones de
@@ -53,6 +59,10 @@ también en Android estándar. No depende de una única versión de HyperOS:
   `ApplicationInfo.CATEGORY_GAME`. Funciona igual en HyperOS 1.x, 2.x y 3.x.
 - No se usan listas privadas de Game Turbo ni APIs ocultas: si un juego no se
   declara como tal, no se detectará automáticamente.
+- La pestaña **Procesos** también usa `UsageStatsManager`: Android no expone la
+  lista real de procesos de otras apps, así que el estado se deduce de los
+  eventos de uso. La detención directa funciona en Android 8–13; desde Android
+  14 la app guía a la ficha del sistema para usar «Forzar detención».
 
 | Dispositivo / sistema | Estado |
 | --- | --- |
@@ -64,9 +74,13 @@ también en Android estándar. No depende de una única versión de HyperOS:
 ## Capturas
 
 <p align="center">
-  <img src="docs/screenshots/resumen.png" width="31%" alt="Resumen de batería" />
-  <img src="docs/screenshots/historial.png" width="31%" alt="Historial y sesiones de juego" />
-  <img src="docs/screenshots/ajustes.png" width="31%" alt="Ajustes y permisos" />
+  <img src="docs/screenshots/resumen.png" width="30%" alt="Resumen de batería" />
+  <img src="docs/screenshots/procesos.png" width="30%" alt="Procesos y apps" />
+  <img src="docs/screenshots/procesos_detener.png" width="30%" alt="Detener una app" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/historial.png" width="30%" alt="Historial y sesiones de juego" />
+  <img src="docs/screenshots/ajustes.png" width="30%" alt="Ajustes y permisos" />
 </p>
 
 ## Primer arranque en HyperOS/MIUI
@@ -108,6 +122,29 @@ ficha de la app como alternativa; la ruta manual está indicada arriba.
 - Pestaña **Hardware**: corriente media medida con pantalla encendida/apagada,
   con WiFi, con datos móviles y sin red. Son mediciones reales de la batería
   agrupadas por estado del sistema, no vatios inventados por componente.
+
+### Procesos
+- Lista de apps con actividad registrada en las últimas **24 h**, con filtros
+  **Todas / Primer plano / Segundo plano / Con consumo** y un interruptor para
+  mostrar u ocultar las apps del sistema.
+- Estado estimado de cada app (**Primer plano**, **Segundo plano**, **Sin
+  actividad reciente**…) a partir de los eventos públicos de uso y del estado de
+  la pantalla.
+- Tiempo en pantalla, último uso y consumo estimado de hoy.
+- Botón **Detener** para las apps que el sistema permite cerrar, y **Ficha** para
+  abrir la pantalla de información de la app.
+- La propia app, el launcher, System UI, el teléfono y Security Center aparecen
+  como protegidos y no ofrecen detención.
+
+#### Detener apps: lo que permite Android
+
+- **Android 8 a 13**: `killBackgroundProcesses()` puede cerrar apps en segundo
+  plano. Es una petición best-effort: HyperOS/MIUI puede reiniciarlas y una app
+  en primer plano no se puede cerrar desde otra.
+- **Android 14 o posterior**: esa API solo puede matar los procesos de la propia
+  app. Por eso «Detener» muestra una explicación y abre la ficha del sistema,
+  donde el usuario puede pulsar **Forzar detención**. No se usan root, Shizuku
+  ni permisos privilegiados.
 
 ### Historial
 - Gráficas de nivel, corriente, temperatura y voltaje (6 h, 24 h, 7 días).
@@ -231,6 +268,14 @@ app/src/main/java/com/batteriatotal/
 - El reparto por app y el modo juego necesitan el acceso de uso y dependen de que
   el servicio siga vivo. HyperOS/MIUI puede detenerlo si no se configuran
   autoinicio y batería sin restricciones.
+- La pestaña **Procesos** muestra apps con actividad de las últimas 24 h, no la
+  lista completa de procesos del sistema. Android no permite a las apps normales
+  ver los procesos de otras apps, sus PIDs ni su energía exacta, así que el estado
+  se deduce de los eventos de uso y el consumo es una estimación.
+- Desde **Android 14**, `killBackgroundProcesses()` solo puede cerrar procesos de
+  la propia app. Por eso «Detener» abre la ficha del sistema para usar «Forzar
+  detención»; no existe una forma pública de cerrar otra app directamente.
+  HyperOS/MIUI puede reiniciarla incluso después de forzar la detención.
 - El modo juego solo reconoce apps que se declaren como juego. No puede leer la
   lista privada de Game Turbo ni controlar la fuente de alimentación.
 - Las pantallas de Autoinicio, Carga y Game Turbo cambian entre versiones de
@@ -241,12 +286,24 @@ app/src/main/java/com/batteriatotal/
 
 ## Verificado en un Xiaomi 14 real
 
-Las versiones 1.1.0 y 1.2.0 se instalaron y probaron en un **Xiaomi 14
+Las versiones 1.1.0, 1.2.0 y 1.3.0 se instalaron y probaron en un **Xiaomi 14
 (`23127PN0CG`, `houji`)** con HyperOS `OS3.0` / Android 16:
 
-- Instalación y actualización por ADB correctas (`versionCode 3`, `versionName
-  1.2.0`).
+- Instalación y actualización por ADB correctas (`versionCode 4`, `versionName
+  1.3.0`).
 - El servicio en primer plano arranca y mantiene su notificación de monitor.
+- **Procesos**: la pestaña mostró 38 apps sin las del sistema y 217 con ellas,
+  con filtros, estado, consumo estimado y acciones por app. Batería Total apareció
+  correctamente en primer plano mientras la pantalla estaba abierta.
+- **Detener Facebook** mostró el diálogo que explica la restricción de Android 14
+  y «Abrir ficha» llevó a
+  `com.miui.securitycenter/com.miui.appmanager.ApplicationsDetailsActivity`, con
+  «Forzar detención» disponible.
+- Se comprobó que en Android 16 `killBackgroundProcesses()` no cambia el PID de
+  Facebook, ChatGPT ni Calculadora; por eso la detención directa solo se ofrece
+  en Android 8–13 y en Android 14+ se usa la vía guiada.
+- El permiso normal `KILL_BACKGROUND_PROCESSES` aparece concedido
+  (`granted=true`) sin intervención del usuario.
 - El modo juego detectó **Call of Duty** (`com.activision.callofduty.shooter`):
   mostró la notificación `Modo juego · Call of Duty` con batería, temperatura y
   corriente, y al cerrar el juego la sesión quedó finalizada y visible en

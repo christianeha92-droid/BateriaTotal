@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -37,12 +38,14 @@ import com.batteriatotal.ui.screens.ConsumptionScreen
 import com.batteriatotal.ui.screens.DashboardScreen
 import com.batteriatotal.ui.screens.DataScreen
 import com.batteriatotal.ui.screens.HistoryScreen
+import com.batteriatotal.ui.screens.ProcessScreen
 import com.batteriatotal.ui.screens.SettingsScreen
 import com.batteriatotal.ui.theme.BateriaTotalTheme
 
 private enum class AppTab(val label: String, val icon: ImageVector) {
     DASHBOARD("Resumen", Icons.Default.Dashboard),
     CONSUMPTION("Consumo", Icons.Default.PieChart),
+    PROCESSES("Procesos", Icons.Default.Memory),
     HISTORY("Historial", Icons.Default.Timeline),
     DATA("Datos", Icons.Default.Storage)
 }
@@ -131,6 +134,7 @@ fun BateriaTotalApp(viewModel: AppViewModel) {
                         onOpenConsumption = { selectedTab = AppTab.CONSUMPTION.ordinal }
                     )
                     AppTab.CONSUMPTION -> ConsumptionScreen(viewModel = viewModel)
+                    AppTab.PROCESSES -> ProcessScreen(viewModel = viewModel)
                     AppTab.HISTORY -> HistoryScreen(viewModel = viewModel)
                     AppTab.DATA -> DataScreen(viewModel = viewModel)
                 }

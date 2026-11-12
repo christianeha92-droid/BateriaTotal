@@ -109,6 +109,50 @@ data class AppConsumptionRow(
     val drainUah: Long
 )
 
+/** Estado aproximado de una app a partir de los eventos públicos de uso. */
+enum class AppProcessState(val label: String) {
+    FOREGROUND("Primer plano"),
+    VISIBLE("Visible"),
+    SERVICE("Servicio"),
+    BACKGROUND("Segundo plano"),
+    CACHED("Sin actividad reciente"),
+    UNKNOWN("Sin datos")
+}
+
+/** Cómo puede detenerse una app desde Batería Total. */
+enum class ProcessStopMode {
+    /** killBackgroundProcesses funciona para otras apps (Android 8–13). */
+    DIRECT,
+
+    /** Android 14+ o app en primer plano: hay que usar «Forzar detención». */
+    MANUAL,
+
+    /** Apps del sistema necesarias o la propia app: no se ofrece detener. */
+    NONE
+}
+
+/**
+ * Fila de la pantalla de procesos. Android no expone a las apps normales la
+ * energía exacta ni la lista completa de procesos de otras apps, así que el
+ * estado se deduce de UsageStats y el consumo es el atribuido por el monitor.
+ */
+data class ProcessRow(
+    val packageName: String,
+    val label: String,
+    val isSystem: Boolean,
+    val state: AppProcessState,
+    val foregroundMs: Long,
+    val lastActivityAt: Long,
+    val drainUah: Long,
+    val isSelf: Boolean,
+    val isLauncher: Boolean,
+    val stopMode: ProcessStopMode
+) {
+    val isForeground: Boolean get() = state == AppProcessState.FOREGROUND || state == AppProcessState.VISIBLE
+    val canStopDirectly: Boolean get() = stopMode == ProcessStopMode.DIRECT
+    val canRequestStop: Boolean get() = stopMode != ProcessStopMode.NONE
+}
+
 data class ThermalZone(
     val name: String,
     val temperatureC: Float

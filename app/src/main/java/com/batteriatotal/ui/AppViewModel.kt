@@ -1,5 +1,6 @@
 package com.batteriatotal.ui
 
+import android.app.ActivityManager
 import android.app.Application
 import android.content.Intent
 import androidx.core.content.ContextCompat
@@ -20,6 +21,8 @@ import com.batteriatotal.data.GameSession
 import com.batteriatotal.data.HardwareState
 import com.batteriatotal.data.HistoryRange
 import com.batteriatotal.data.Permissions
+import com.batteriatotal.data.ProcessRepository
+import com.batteriatotal.data.ProcessRow
 import com.batteriatotal.data.SensorInfo
 import com.batteriatotal.data.SettingsStore
 import com.batteriatotal.data.Sample
@@ -55,6 +58,9 @@ data class LiveUiState(
     val remainingCapacityMah: Float? = null
 )
 
+/** Aviso efímero de la pantalla de procesos (se muestra como snackbar). */
+data class ProcessNotice(val id: Long, val text: String)
+
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application
@@ -62,6 +68,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val settings = SettingsStore.get(app)
     private val reader = BatteryReader(app)
     private val usageRepository = UsageRepository(app)
+    private val processRepository = ProcessRepository(app)
     private val systemInfo = SystemInfoProvider(app)
 
     private val _live = MutableStateFlow(
@@ -80,6 +87,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _consumptionPeriod = MutableStateFlow(ConsumptionPeriod.TODAY)
     val consumptionPeriod: StateFlow<ConsumptionPeriod> = _consumptionPeriod.asStateFlow()
+
+    private val _processes = MutableStateFlow<List<ProcessRow>>(emptyList())
+    val processes: StateFlow<List<ProcessRow>> = _processes.asStateFlow()
+
+    private val _processesGeneratedAt = MutableStateFlow(0L)
+    val processesGeneratedAt: StateFlow<Long> = _processesGeneratedAt.asStateFlow()
+
+    private val _processNotice = MutableStateFlow<ProcessNotice?>(null)
+    val processNotice: StateFlow<ProcessNotice?> = _processNotice.asStateFlow()
 
     private val _historyRange = MutableStateFlow(HistoryRange.DAY)
     val historyRange: StateFlow<HistoryRange> = _historyRange.asStateFlow()
@@ -128,6 +144,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     private val refreshMutex = Mutex()
+    private val processMutex = Mutex()
+    private var processCache: ProcessRepository.ProcessSnapshot? = null
+    private var processNoticeId = 0L
     private var liveJob: Job? = null
     private var averageCacheAt = 0L
     private var averageCache: Pair<Float?, Float?> = null to null
@@ -175,6 +194,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _notificationPermission.value = Permissions.hasNotificationPermission(app)
         _ignoringBatteryOptimizations.value = Permissions.isIgnoringBatteryOptimizations(app)
         usageCache.clear()
+        processCache = null
     }
 
     fun ensureMonitoring() {
@@ -237,6 +257,81 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (_consumptionPeriod.value == period) return
         _consumptionPeriod.value = period
         refreshData()
+    }
+
+    /**
+     * Recalcula la lista de apps con actividad reciente. El estado es una
+     * estimación basada en UsageStats, no la lista real de procesos.
+     */
+    fun refreshProcesses(force: Boolean = true) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val drains = repository.appDrainsBetween(startOfToday(), now)
+            val snapshot = loadProcessSnapshot(now, drains, force)
+            withContext(Dispatchers.Main) { publishProcesses(snapshot) }
+        }
+    }
+
+    /**
+     * Detiene una app en segundo plano con la API pública
+     * `killBackgroundProcesses`. Android/HyperOS puede reiniciarla y no permite
+     * cerrar por este medio una app que está en primer plano: en ese caso la UI
+     * abre su ficha para que el usuario use "Forzar detención".
+     */
+    fun stopProcess(packageName: String) {
+        val row = _processes.value.firstOrNull { it.packageName == packageName } ?: return
+        if (!row.canStopDirectly) {
+            Permissions.openAppDetails(app, packageName)
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val activityManager = app.getSystemService(ActivityManager::class.java)
+            val requested = runCatching {
+                activityManager?.killBackgroundProcesses(packageName)
+                true
+            }.getOrDefault(false)
+            delay(700L)
+            val now = System.currentTimeMillis()
+            val drains = repository.appDrainsBetween(startOfToday(), now)
+            val snapshot = loadProcessSnapshot(now, drains, force = true)
+            withContext(Dispatchers.Main) {
+                publishProcesses(snapshot)
+                val message = if (requested) {
+                    "Se pidió detener ${row.label}. Android o HyperOS puede reiniciarla."
+                } else {
+                    "No se pudo detener ${row.label}."
+                }
+                _processNotice.value = ProcessNotice(++processNoticeId, message)
+            }
+        }
+    }
+
+    fun openProcessDetails(packageName: String) {
+        Permissions.openAppDetails(app, packageName)
+    }
+
+    fun clearProcessNotice(id: Long) {
+        if (_processNotice.value?.id == id) _processNotice.value = null
+    }
+
+    private suspend fun loadProcessSnapshot(
+        now: Long,
+        drains: Map<String, Long>,
+        force: Boolean
+    ): ProcessRepository.ProcessSnapshot = processMutex.withLock {
+        val cached = processCache
+        if (!force && cached != null && now - cached.generatedAt < PROCESS_CACHE_MS) {
+            return@withLock cached
+        }
+        val snapshot = withContext(Dispatchers.IO) { processRepository.load(now, drains) }
+        processCache = snapshot
+        snapshot
+    }
+
+    private fun publishProcesses(snapshot: ProcessRepository.ProcessSnapshot) {
+        if (snapshot.generatedAt < _processesGeneratedAt.value) return
+        _processes.value = snapshot.rows
+        _processesGeneratedAt.value = snapshot.generatedAt
     }
 
     fun setHistoryRange(range: HistoryRange) {
@@ -377,6 +472,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val todayUsage = usageFor("today", todayStart, now)
         val todayDrains = repository.appDrainsBetween(todayStart, now)
         val todayRows = mergeApps(todayUsage.apps, todayDrains)
+        val processSnapshot = loadProcessSnapshot(now, todayDrains, force = false)
         val lastSample = repository.lastSample()
 
         val period = _consumptionPeriod.value
@@ -449,6 +545,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _historySamples.value = historySamples
             _chargingSessions.value = sessions
             _gameSessions.value = gameSessions
+            publishProcesses(processSnapshot)
         }
     }
 
@@ -499,4 +596,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun startOfToday(): Long =
         LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    private companion object {
+        const val PROCESS_CACHE_MS = 20_000L
+    }
 }

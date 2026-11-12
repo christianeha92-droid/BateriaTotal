@@ -70,8 +70,13 @@ object Permissions {
     }
 
     fun openAppDetails(context: Context) {
+        openAppDetails(context, context.packageName)
+    }
+
+    /** Abre la ficha de otra app para que el usuario pueda forzar su detención. */
+    fun openAppDetails(context: Context, packageName: String) {
         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.parse("package:${context.packageName}")
+            data = Uri.parse("package:$packageName")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         launch(context, intent)
